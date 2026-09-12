@@ -1,0 +1,127 @@
+import os
+import sys
+import certifi
+import multiprocessing
+import argparse
+
+sys.setrecursionlimit(10000)
+os.environ["SSL_CERT_FILE"] = certifi.where()
+
+if sys.platform == "darwin":
+    multiprocessing.set_start_method("fork", force=True)
+
+if getattr(sys, 'frozen', False):
+    os.chdir(os.path.dirname(sys.executable))
+
+from utils.files import get_application_support
+from utils.config import Config
+from utils import startup_check, check_fonts, console, load_fonts, is_admin, run_elevated, relaunch_normal, send_telemetry_ping, get_update_info
+from bot.controller import BotController
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Ghost selfbot launcher")
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Force CLI mode instead of the GUI",
+    )
+    parser.add_argument(
+        "-qt", "--qt",
+        action="store_true",
+        help="Use the PySide6 Qt GUI instead of tkinter",
+    )
+    parser.add_argument(
+        "--install-fonts",
+        action="store_true",
+        dest="install_fonts",
+        help="Install required fonts and relaunch",
+    )
+    return parser.parse_args()
+
+def run_gui(update_info=None):
+    from gui.main import GhostGUI
+
+    cfg = Config()
+    controller = BotController()
+    
+    GhostGUI(controller, update_info=update_info).run()
+
+
+def run_qt_gui(update_info=None):
+    from gui_qt.main import run_qt_gui as _run_qt
+
+    cfg = Config()
+    controller = BotController()
+
+    _run_qt(bot_controller=controller, update_info=update_info)
+
+
+def run_cli():
+    startup_check.check()
+    cfg = Config()
+
+    token = cfg.get("token")
+    if not token:
+        console.error("No token found. Please enter one below.")
+        token = input("> ")
+        cfg.set("token", token)
+        cfg.save()
+
+    console.info("Starting bot.")
+    controller = BotController()
+    controller.start()
+
+    try:
+        controller.join()
+    except KeyboardInterrupt:
+        console.info("Exiting.")
+        controller.stop()
+        controller.join()
+
+def main():
+    args = parse_args()
+    headless = args.headless
+
+    get_application_support()
+    update_info = get_update_info()
+    startup_check.check()
+    cfg = Config()
+    cfg.check()
+    cfg.set_headless(headless)
+    send_telemetry_ping()
+
+    if headless:
+        console.info("Running in headless (CLI) mode.")
+        run_cli()
+        return
+
+    if args.qt:
+        console.info("Running in Qt GUI mode.")
+        run_qt_gui(update_info=update_info)
+        return
+
+    console.info("Running in GUI mode.")
+
+    if update_info and update_info.has_update:
+        run_gui(update_info=update_info)
+        return
+
+    if cfg.get_skip_fonts():
+        cfg.set_skip_fonts(False)
+        run_gui(update_info=update_info)
+    elif check_fonts():
+        run_gui(update_info=update_info)
+    elif args.install_fonts:
+        load_fonts()
+        if check_fonts():
+            relaunch_normal()
+    else:
+        if sys.platform == "win32" and not is_admin():
+            run_elevated()
+            return
+        load_fonts()
+        run_gui(update_info=update_info)
+
+if __name__ == "__main__":
+    main()
