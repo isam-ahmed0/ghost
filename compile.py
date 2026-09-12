@@ -23,8 +23,12 @@ def build(qt=False):
     system = platform.system()
 
     name = "Ghost"
-    entry_script = "ghost.py"
     icon = "data/icon.ico" if system == "Windows" else "data/icon.png"
+
+    if qt:
+        entry_script = "ghost_qt.py"
+    else:
+        entry_script = "ghost.py"
 
     args = [
         sys.executable, "-m", "PyInstaller",
