@@ -2,12 +2,13 @@ import os
 import sys
 import platform
 import subprocess
+import argparse
 import plistlib
 
 from utils.config import VERSION
 
 def sign_macos_app(path):
-    print(f"🔏 Signing macOS app at {path}...")
+    print(f"Signing macOS app at {path}...")
     subprocess.run([
         "codesign",
         "--deep",
@@ -18,47 +19,61 @@ def sign_macos_app(path):
         path
     ], check=True)
 
-def build():
+def build(qt=False):
     system = platform.system()
 
     name = "Ghost"
     entry_script = "ghost.py"
-    icon = "data/icon-win.png" if system == "Windows" else "data/icon.png"
+    icon = "data/icon.ico" if system == "Windows" else "data/icon.png"
 
     args = [
         sys.executable, "-m", "PyInstaller",
         f"--name={name}",
-        "--onefile",
         "--clean",
         "--noconfirm",
-        # "--windowed",
-        "--noconsole",
         f"--icon={icon}",
         "--hidden-import=discord",
         "--hidden-import=discord.ext.commands",
-        "--hidden-import=PIL.ImageTk",
-        "--hidden-import=PIL._tkinter_finder",
         "--collect-submodules=discord",
-        entry_script
     ]
 
-    if system == "Windows":
+    if qt:
         args += [
-            "--paths=.venv\\Lib\\site-packages",
-            "--add-data=data\\*;data",
-            "--add-data=data\\fonts\\*;data/fonts",
-            "--add-data=data\\icons\\*;data/icons"
+            "--onedir",
+            "--windowed",
+            "--noupx",
+            "--hidden-import=PySide6.QtWidgets",
+            "--hidden-import=PySide6.QtCore",
+            "--hidden-import=PySide6.QtGui",
+            "--collect-submodules=curl_cffi",
         ]
     else:
         args += [
-            "--paths=.venv/lib/python3.10/site-packages",
+            "--onefile",
+            "--noconsole",
+            "--hidden-import=PIL.ImageTk",
+            "--hidden-import=PIL._tkinter_finder",
+        ]
+
+    args.append(entry_script)
+
+    if system == "Windows":
+        args += [
+            "--add-data=data\\*;data",
+            "--add-data=data\\fonts\\*;data/fonts",
+            "--add-data=data\\icons\\*;data/icons",
+        ]
+    else:
+        args += [
             "--add-data=data/*:data",
             "--add-data=data/fonts/*:data/fonts",
             "--add-data=data/icons/*:data/icons",
-            "--osx-bundle-identifier=fun.benny.ghost"
         ]
+        if not qt:
+            args.append("--osx-bundle-identifier=fun.benny.ghost")
 
-    print(f"🔨 Building Ghost {VERSION} for {system}...")
+    mode = "Qt GUI (one-folder)" if qt else "CLI (one-file)"
+    print(f"Building Ghost {VERSION} for {system} [{mode}]...")
     subprocess.run(args, check=True)
 
     if system == "Darwin":
@@ -66,4 +81,7 @@ def build():
         sign_macos_app(app_path)
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser(description="Build Ghost")
+    parser.add_argument("--qt", action="store_true", help="Build Qt GUI (one-folder, windowed)")
+    args = parser.parse_args()
+    build(qt=args.qt)

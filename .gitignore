@@ -10,7 +10,8 @@ build/
 dist/
 Ghost.spec
 changelog.py
+installer/*.exe
 
 # Ghost Qt GUI
-gui-qt/.converter_cache.json
-gui-qt/*_converted.py
+gui_qt/.converter_cache.json
+gui_qt/*_converted.py
